@@ -1,0 +1,254 @@
+此文仅简单解释基础解释器和lisp的概念
+
+1 计算和计算机，c和lisp
+    在黑客与画家中，大牛paul曾把编程语言分为两个方向，一个是靠近计算机（冯诺依曼结构）的方向，另一个则是靠近计算本身（lambda演算）的方向。
+    抛开所有细节不谈，计算机可以看作是用总线将存储,cpu,io设备连接的设备，是的，简单的说就是这样，而c语言恰巧对应了这样的架构，或者说c语言用精巧的方式的将对计算机本身的控制进行里封装。排除不必要部分，c语言的核心似乎只剩下，嗯，if,goto,基本的运算（数字 逻辑预算），函数的处理，指针，基本的类型处理,，，，嗯，没了，似乎就这些，switch,所有循环都可以用if和goto写出，而像是printf一类的库函数本身并不属于语言的核心。而把这些和汇编稍作对应就会得到，cmp jmp
+ mov lea call ret等指令。
+    正由于c的小巧精致，所以os的kernel都是用c写的，为什么要用c写kernel，因为kernel本身就是一个管理计算机硬件的平台，除了c似乎没有更好的选择了，排除tcp/ip协议栈，各种驱动，各种file system的支持，留下kernel最核心的部分，进程调度，内存管理，中断异常处理，再排除复杂的算法如内存管理的伙伴算法，slab分配器，进程调度的完全公平调度，中断处理中的软中断，tasklet等，只去看必须做的事，kernel需要做什么，1初始化cpu的分段，主要是对gdt(cpu保护模式下的内存段描述符)的初始化，代码或许长下面这个样子 init_gdt(&gdt[1],0xffff,0,0,0x9A,0xCF,0) （事实上，这真的是跑在x86裸机下的代码），对页表的初始化,主要是把页表目录写入cr3寄存器，大致可能长这个样子 swapper_pg_dir[i]=6 ;// 110 not in phymem,write and read,use  swapper_pg_dir[j]=(pmdbase+(j-768)*4096)+7; //111 in phymem,write and read,use（swapper_pg_dir就是cr3寄存器需要装入的页表目录的地址），而中断处理则是将中断处理函数地址装入idt，代码或许，，，， 
+init_idt_desc(INT_VECTOR_PAGE_FAULT,DA_386IGate,page_fault,PRIVILEGE_KRNL);而进程调度则是保存上一个进程的寄存器栈等信息，然后执行跳转。
+    ok跑题了，总而言之在编程语言的一端c语言代表了贴进计算机本色的方向，而另一端的lisp则代表的是靠近计算的方向
+
+2 lisp长这样
+    提示：千万不要去看括号，把他当作python的缩进语法！
+    lisp？先上个基于lisp的方言clojure的快速排序找一个key把比key小的扔在key左边，比key大的扔在key右边，然后对key的左右分别再如此递归直到空了
+
+(defn qsort [[head & tail]]
+ (if head
+    (concat (qsort (filter #(< % head) tail))
+              [head]
+              (qsort (filter #(> % head) tail)))
+    []))
+
+user=> (qsort [323 4 2 3 6 1 -1 -6 54])
+(-6 -1 1 2 3 4 6 54 323)
+如果是第一次见lisp代码或许会有种WTF的感叹，那么多括号....啥玩意？！ 单其实仔细一看  (defn qsort [[head & tail]]....定义一个函数qsort，参数是一个数组，其中[head & tail]用到了解构（模式匹配——一种常见于erlang haskell scala的语法的低配版本）意思是将数组第一个数绑定为key，后面的部分绑定为tail。
+
+(if head 如果数组不是空的
+ 
+(concat (qsort (filter #(< % head) tail))
+              [head]
+              (qsort (filter #(> % head) tail))  )
+将比key小和比key大的部分分别递归调用qsort，然后拼起来，其中(filter #(< % head) tail)) 的意思为将 tail中比head 小的数字过滤掉 
+#(< % head) 为闭包(一个含有被绑定里某个值的自由变量的函数)其中的 %是参数，而head则是闭包绑定的key，filter会用tail中的每一个数字调用 #(< % head) 如果返回True则留下下，反之去掉。其实这样的语句很平常比如 select * from table where id < x
+
+[] else的部分 如果数组空里直接返回空数组........
+
+ok这个qsort确实很短，但是是不是有点难看？那么多括号又是作啥的？！这是什么鬼的语法？那么奇怪？
+
+
+3 lisp的最简描述
+1 首先lisp程序由表达式组成，表达式可以是一个基本的玩意 比如一个变量名，数字，基本操作等，或是由括号括起来的列表 比如 （+ 1 2）就由 + ,1 , 2 ，（+ 1 2）四个表达式构成。
+2 每一个表达式的求值都会返回一个值，比如 1 返回 1 而（+ 1 2）返回一个3。ok,没了......Lisp的语法和最核心的基本规则已经介绍完毕.....等等，或许你已经看出来了，list实际是用list（也就是单链表）直接把代码写成了AST— Abstract Syntax Trees语法抽象树的形式，与其说lisp语法奇怪不如说lisp压根就没有语法！编译的第一步不就是把源代码parse成 AST么？
+
+比如基于lr的yacc
+if_exp
+        | IF LP cond_exp RP block ELSE block
+        {
+            $$ = create_if_exp($3, $5，$7);
+        }
+此代码表示 if语句可能长这样 “if关键字（ 条件表达式 ） {代码块} else {代码块}”   if（..）{..}{..}（create_if_exp($3, $5，$7); 其中的 3 5 7 代表 cond_exp 和两个 block）
+嘿 这不就是 (if cond_exp ture_exp else_exp)么？ cond_exp ture_exp else_exp 分别换成
+key
+(concat (qsort (filter #(< % head) tail))
+              [head]
+              (qsort (filter #(> % head) tail))  )
+[]
+这不就是那个qsort的body么？事实上lisp并不区分代码和数据（+ 1 2 ）既是一个list又是Lisp的代码
+ok,有了用ast表示的语法，在加上比如像是 car(取一个list的开头)，cdr(取一个list去掉头的部分)，qoute(引述，用'表示，代表对一个List不进行求值，而是直接返回本身，比如'(+ 1 2)会直接返回（+ 1 2） 当然引述还有用`表示的语法引述，比如在a=1的情况下 `(1 ,a 2)会返回（1 1 2）scheme用,表示解引述，语法引述主要用于宏 ） + - * /,cond,eq?define,lambda，let等那么lisp的其他部分几乎可以用这些基本元素创造，
+
+比如我们的filter用另一种lisp方言scheme，写出来长下面那样
+(define m_filter
+  (lambda (func list)
+     (cond
+       ((null? list) '())
+       ((func (car list)) 
+        (cons (car list) (m_filter func (cdr list) )))
+       (else  (m_filter func (cdr list) )))))
+
+(m_filter   (lambda (x) (< x 4))  '(1 2 3 4 5 6 ))
+'(1 2 3)
+    之所以第一次的qsort使用clojure，而现在使用scheme是因为，clojure可以使用解构省略让代码更简短易读，而scheme更直观的展示出用基本的操作符和ast语法拼凑出lisp的其他部分。
+    但是这里的其他部分也不是全部，因为许多功能需要用lisp的宏完成,lisp的宏和其他所有语言都不一样，因为lisp不区分代码和数据，所以对数据的操作就可以改变代码本身，宏提供的就是修改代码的功能，比如用宏生成函数或是一些其他操作符，比如说（when  xxx 。。。。）如果xxx为真执行。。。的代码，再比如说defn
+
+而用我的解释器filter写出来是这个样子
+(define m_filter
+  (lambda (func list)
+     (cond
+       (null? list) `()
+       (func (car list))
+            (cons (car list) (m_filter func (cdr list) ))
+       `else (m_filter func (cdr list) ))))    
+这里我刻意在写法上比scheme少了几个括号！scheme的cond实在是有点难看！之所以现在才祭出自己的东西，，这个嘛，，，，人家也不是死不要脸啦.....
+
+
+如果用scheme写qsort长这样
+(define qsort
+  (lambda (list)
+    (if (null? list)
+       `()
+       (let ((key (car list)) (tail (cdr list)))
+             (append (qsort  (m_filter (lambda (x) (<= x key)) tail))
+                    `(,key)
+                        (qsort  (m_filter (lambda (x) (> x key)) tail)))))))
+
+如果用自己的解释器写出来则是
+(define qsort
+  (lambda (l)
+    (case l
+      `() `()
+      `(key : rest ) 
+           (concat (qsort (filter  (lambda (x) (< x key))  rest))
+                  key
+                   (qsort (filter  (lambda (x) (> x key))  rest))))))
+
+这里加入了模式匹配的语法
+
+
+
+
+
+4 lisp的求值
+  明白了lisp的基本语法那么Lisp的求值也就很轻松了，首先我们定义基本操作像是if + - eq等，然后要求值一个比如（+ (+ 2 3) 3）这样的表达式，就必须先求值 + 需要的2个表达式，明白了这一点写一个最最简单的只支持 + eq if的解释器 代码如下
+
+(define [atom? exp]
+ (not (list? exp))) 
+判断是不是一个a d v 1 2 3这样的变量
+
+
+(define [take  n lot]
+ (if (eq? 0 n) 
+     (car lot)
+     (take (- n 1) (cdr lot))))
+从`(1 2 3)中取出第n个元素
+
+ 
+(define [cadddr exp]
+ (take 3 exp))
+
+scheme自带 cadr caddr 表示取list中第二第三个元素，因为没有cadddr我自己弄一个
+
+(define [add? exp]
+ (and (list? exp) 
+      (eq? 3 (length exp))
+      (eq? '+ (car exp))))
+判断是不是 加法 加法中必须有3个元素 第一个是+
+
+(define [if? exp]
+ (and (list? exp) 
+      (eq? 4 (length exp))
+      (eq? 'if (car exp))))
+判断是不是 if if中必须有4个元素 第一个是if
+
+
+(define [eqq? exp]
+ (and (list? exp) 
+      (eq? 3 (length exp))
+      (eq? 'eqq (car exp))))
+判断是不是eqq eqq中必须有3个元素 第一个是eqq
+
+
+
+(define [value_of exp]
+  (cond 
+   ((atom? exp) exp) 如果是a 1 2这样的自求值对象直接返回
+   ((add?  exp) 
+    (+ (value_of (cadr exp)) (value_of (caddr exp)) ) )  如果是加法先对+需要的两个参数求值，然后求值+
+   ((if? exp)
+    (let ( [f_o_t (value_of (cadr exp))] )  先求值if的条件，如果是真的就求值 if的第三个表示，如果假的求值第四个
+     (if f_o_t (value_of (caddr exp)) (value_of (cadddr exp)))))
+   ((eqq? exp)
+    (eq? (value_of (cadr exp)) (value_of (caddr exp)) )) 如果是等于 先对等于需要的两个参数求值，然后求值等于
+   (else 'error)))
+
+5 关于c++写的解释器
+
+程序结构其实非常简单，首先在parse.cc中的hread函数会将读入的字符parse成为表达式使用LL，表达式可以是
+typedef enum{
+    NO,   
+    INT ,
+    DOUBLE,
+    STRING,
+    ATOM , 比如a b c 
+    BOOL,
+    LAMBDA  , 
+    LIST,
+    APPLYABLE,
+    CLOSURE, 闭包
+    CALLCC,  
+} expression_type;几种类型
+其中callcc表示轻量级别线程，可以将在整个栈一起扣出来，暂停执行一段代码 在需要的时候再执行,整个actor就以他为基础
+比如
+(if (eq? 1 (callcc reif) ) 1 2)
+这里表示把 （eq? 1 ?）后面的一个表达式“扣出来”并存在变量reif当中，当调用
+(reif 1)就表示执行 (if (eq? 1 1) 1 2) 返回 1，
+这个模式其实也很常见比如
+void net(){
+ socket s;
+ char buf[256];
+ init_socket(s);
+ recevie(s,buf);
+ if(buf....){
+   do_someting;
+ }
+
+}
+是不是差不多呢
+
+当exp parse完成后会执行 fix
+fix会递归验证每一个list表达式 比如
+
+(define sum
+  (lambda (v)
+    (if (eq? v 0)
+       0
+       (+ v (sum (- v 1))))))
+会验证最外层 define ， 整个lambda , 整个if 和 if中  (eq? v 0) (+ v (sum (- v 1)))这些部分，fix的主要工作是验证写法是否正确，
+确认那些地方是funcall，这次funcall需要几个参数 比如  (sum (- v 1)) 就是一个funcall 需要一个参数
+当然还会确定一个函数中的自由变量 所谓自由变量是指没有绑定特定值的变量 比如
+（lambda (x) (+ x y )）其中的y就是自由变量
+
+fix完成后会在class eval中对exp进行求值，eval维护了求值需要的栈，
+value_of和apply_stack两个函数互递归的对exp进行求值
+primary_proc是一个单例类，其中定义了 + - * / < > cons car cdr concat eq? null? define 等基本操作
+
+
+我承认这个 value_of/apply_stack确实的效率确实 低，很低，非常低，特别低，惊人的低，令人发指的低，丧心病狂的低，惊天地泣鬼神的低........
+但是基于ast解释的解释器真的没有优化的必要，几乎所有的脚本语言都是编译后通过vm执行
+优化ast解释的功夫完全可以弄一个vm出来，事实上也并不需要一个vm，现成的llvm可能是最棒的东西，那jit的速度真不是吹的
+许多功能，尤其是最慢的部分比如兔子（真名好像叫啥斐波那契）数列的树形递归完全可以通过llvm执行（在有ast的情况下，如果只是单纯的翻译一个算兔子数列的函数，并用jit执行真的只需要很少的代码），而case等东西可以在value_of/apply_stack执行
+但是这需要很多时间，其中会有非常多的细节以及问题需要处理，比如 llvm是非常严格的静态类型，而这里的语句却是动态类型....比如闭包等等.....
+写一个程序真正难在细节上不是么？
+ps：其实llvm的部分已经在进行中
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

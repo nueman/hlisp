@@ -1,0 +1,161 @@
+
+
+(define fib
+  (lambda (x)
+    (if (< x 3)
+       1
+      (+  (fib (- x 1)) (fib (- x 2))))))
+
+(fib 6)
+
+(define dfib
+  (lambda (x)
+    (if (< x 4)
+       1
+      (+  (dfib (- x 1) ) (dfib (- x 2)) (dfib (- x 3))))))
+(dfib 6)
+
+(define sumcps
+  (lambda (num k)
+    (if (eq? num 0)
+       (k 0)
+       (sumcps (- num 1) (lambda (n) (k (+ num n)))))))
+
+
+(sumcps 5 (lambda (a) (+ a 1)))
+
+
+
+
+(define Y
+ (lambda ( le)
+  ((lambda (f ) (f f ) )
+   (lambda (g )
+     ( le (lambda ( x ) ( (g g ) x )))))))
+
+
+(define sumY (Y   (lambda (sum)
+    (lambda (n)
+      (if (eq? n 0)
+         0
+         (+ n (sum (- n 1)))))) ) )
+
+(sumY 5)
+
+(define A (lambda (d)
+  (lambda (y)
+    (lambda (z)
+      (+ d y z )))) )
+
+(define A1 (A 1))
+(define A2 (A1 1))
+
+(define B1 (A 3))
+(define B2 (B1 3))
+
+(A2 1) 
+(B2 3)
+
+
+
+
+(define sum
+  (lambda (v)
+    (if (eq? v 0)
+       0
+       (+ v (sum (- v 1))))))
+
+(sum 5)
+
+(define sum-tail
+  (lambda (a ret)
+    (if (eq? a 0)
+       ret
+       (sum-tail (- a 1 ) (+ ret a)))))
+
+(sum-tail 5 0)
+
+ (if (eq? 1 (callcc ifrecall))  4 5 )
+
+(ifrecall 1)
+
+
+(define sumrecall
+  (lambda (v)
+    (if (eq? v 0)
+       (callcc recall)
+       (+ v (sumrecall (- v 1))))))
+
+(sumrecall 5)
+(recall 5)
+
+(define reverse
+  (lambda (a l)
+    (if (null? a)
+       l
+       (reverse (cdr a) (cons (car a) l)))))
+
+ (reverse `( 1 2 3) `())
+
+
+
+
+(define map
+  (lambda (func list)
+    (if (null? list)
+       `()
+       (cons (func (car list)) (map func (cdr list))))))
+
+(map (lambda (x) (+ 1 x)) `(1 2 3 5))
+
+
+(define filter
+  (lambda (func list)
+     (cond
+       (null? list) `()
+       (func (car list))
+            (cons (car list) (filter func (cdr list) ))
+       `else (filter func (cdr list) ))))   
+
+(filter   (lambda (x) (< x 4))  `( 1 2 3 4 5 6 7 8 9  ))
+
+
+(define qsort
+  (lambda (l)
+    (if (null? l)
+       `()
+       (concat (qsort  (filter (lambda (x) (< x (car l))) (cdr l)))
+             (car l)
+              (qsort  (filter (lambda (x) (> x (car l))) (cdr l)))))))
+
+(qsort `(1 -1 4 3 5 -8 12 666))
+
+
+(define listadd
+  (lambda (l)
+    (case l
+      `() 0
+      (a : rest) (+ a (listadd rest)))))
+
+
+(listadd `(1 2 3 4 5))
+
+(define qsort2
+  (lambda (l)
+    (case l
+      `() `()
+      `(key : rest ) 
+           (concat (qsort2 (filter  (lambda (x) (< x key))  rest))
+                  key
+                   (qsort2 (filter  (lambda (x) (> x key))  rest))))))
+
+(qsort2 `(1 -1 4 3 5 -8 12 666))
+
+
+
+
+
+
+
+
+
