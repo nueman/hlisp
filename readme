@@ -1,0 +1,2 @@
+# hlisp
+一个lisp解释器详情,请看test/allaboutthis,因为目前无特殊需求故使用eclipse自动生成的makefile，代码使用纯c++ 11，未在window下运行过
